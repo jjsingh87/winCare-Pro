@@ -37,5 +37,13 @@ Describe 'WinCare-Pro Module' {
         Invoke-SystemReport -Path $testPath
         Test-Path $testPath | Should -Be $true
         Remove-Item $testPath -Force
+        }
+
+        It 'Register-ScheduledCleanup supports -WhatIf for Daily' {
+            { Register-ScheduledCleanup -Frequency Daily -Time '01:00' -TaskName 'TestCleanupTask' -WhatIf } | Should -Not -Throw
+        }
+
+        It 'Register-ScheduledCleanup supports -WhatIf for Weekly' {
+            { Register-ScheduledCleanup -Frequency Weekly -Time '02:00' -TaskName 'TestCleanupTaskWeekly' -WhatIf } | Should -Not -Throw
     }
 }

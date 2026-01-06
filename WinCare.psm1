@@ -24,6 +24,66 @@ function Get-SystemHealth {
     }
 }
 
+function Register-ScheduledCleanup {
+<#!
+.SYNOPSIS
+    Schedules automatic cleanup of temp files using Windows Task Scheduler.
+.DESCRIPTION
+    Creates or updates a scheduled task that runs Invoke-QuickCleanup at the specified frequency (Daily or Weekly).
+.PARAMETER Frequency
+    The frequency to run the cleanup task. Accepts 'Daily' or 'Weekly'.
+.PARAMETER Time
+    The time of day to run the cleanup (24-hour format, e.g., '03:00'). Defaults to '03:00'.
+.PARAMETER TaskName
+    The name of the scheduled task. Defaults to 'WinCarePro-Cleanup'.
+.EXAMPLE
+    Register-ScheduledCleanup -Frequency Daily -Time '02:00'
+.EXAMPLE
+    Register-ScheduledCleanup -Frequency Weekly -Time '04:00' -TaskName 'MyCleanupTask'
+#>
+    [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Daily','Weekly')]
+        [string]$Frequency,
+
+        [Parameter()]
+        [string]$Time = '03:00',
+
+        [Parameter()]
+        [string]$TaskName = 'WinCarePro-Cleanup'
+    )
+
+    $modulePath = (Get-Module WinCare-Pro -ListAvailable | Select-Object -First 1).Path
+    if (-not $modulePath) {
+        throw 'WinCare-Pro module not found in PSModulePath.'
+    }
+    $psm1Path = [System.IO.Path]::ChangeExtension($modulePath, '.psm1')
+    $action = "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '$psm1Path'; Invoke-QuickCleanup\""
+
+    $trigger = if ($Frequency -eq 'Daily') {
+        New-ScheduledTaskTrigger -Daily -At $Time
+    } else {
+        New-ScheduledTaskTrigger -Weekly -At $Time
+    }
+
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+
+    $task = New-ScheduledTask -Action (New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '$psm1Path'; Invoke-QuickCleanup\"") -Trigger $trigger -Principal $principal
+
+    if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+        if ($PSCmdlet.ShouldProcess($TaskName, 'Update scheduled cleanup task')) {
+            Set-ScheduledTask -TaskName $TaskName -Task $task
+            Write-Host "Updated scheduled task '$TaskName' to run $Frequency at $Time."
+        }
+    } else {
+        if ($PSCmdlet.ShouldProcess($TaskName, 'Register new scheduled cleanup task')) {
+            Register-ScheduledTask -TaskName $TaskName -InputObject $task
+            Write-Host "Registered new scheduled task '$TaskName' to run $Frequency at $Time."
+        }
+    }
+}
+
 function Get-UserSession {
 <#!
 .SYNOPSIS
